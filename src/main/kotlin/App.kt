@@ -1,7 +1,7 @@
 package org.example
 import java.io.File
 
-// immutable tasks (managed as copies of list)
+// immutable tasks
 var tasks: List<Triple<String, Boolean, String>> = listOf()
 var lastAction: Pair<String, Triple<String, Boolean, String>?>? = null // to track undo
 
