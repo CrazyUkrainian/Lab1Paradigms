@@ -3,8 +3,14 @@ import java.io.File
 
 // immutable tasks
 var tasks: List<Triple<String, Boolean, String>> = listOf()
-var lastAction: Pair<String, Triple<String, Boolean, String>?>? = null // to track undo
+sealed class LastAction {
+    data class Add(val task: Triple<String, Boolean, String>) : LastAction()
+    data class Complete(val task: Triple<String, Boolean, String>) : LastAction()
+    object Remove : LastAction() // No specific task, represents multiple removals
+    object None : LastAction() // Default state, no last action
+}
 
+var lastAction: LastAction = LastAction.None // Initialize with no action
 fun main() {
     tasks = loadTasks() // load tasks from file
     println("welcome to the best kotlin ToDo app")
@@ -62,7 +68,7 @@ fun addTask() {
     val newTask = Triple(description, false, note)
 
     tasks = tasks + newTask // immutable update
-    lastAction = "add" to newTask
+    lastAction = LastAction.Add(newTask)
     println("task added!")
 }
 
@@ -74,7 +80,7 @@ fun markTaskComplete() {
     tasks = tasks.mapIndexed { index, t ->
         if (index == taskIndex) t.copy(second = true) else t
     }
-    lastAction = "complete" to task
+    lastAction = LastAction.Complete(task)
     println("task marked as complete!")
 }
 
@@ -86,30 +92,30 @@ fun removeCompletedTasks() {
     }
 
     tasks = tasks.filterNot { it.second } // immutable update
-    lastAction = "remove" to null
+    lastAction = LastAction.Remove
     println("completed tasks removed!")
 }
-
 fun undoLastAction() {
-    if (lastAction == null) {
-        println("No action to undo")
-        return
-    }
-
-    when (lastAction!!.first) {
-        "add" -> {
-            tasks = tasks - lastAction!!.second!!
+    when (lastAction) {
+        is LastAction.Add -> {
+            tasks = tasks - (lastAction as LastAction.Add).task
+            println("Last added task removed!")
         }
-        "complete" -> {
-            lastAction!!.second?.let { undoneTask ->
-                tasks = tasks.map { if (it == undoneTask) undoneTask.copy(second = false) else it }
-            }
+        is LastAction.Complete -> {
+            val undoneTask = (lastAction as LastAction.Complete).task
+            tasks = tasks.map { if (it == undoneTask) undoneTask.copy(second = false) else it }
+            println("Task completion undone!")
         }
-        "remove" -> println("Undo for removal is not supported")
+        is LastAction.Remove -> {
+            println("Undo for removal of multiple tasks is not supported")
+        }
+        LastAction.None -> {
+            println("No action to undo")
+        }
     }
-    lastAction = null
-    println("Last action undone!")
+    lastAction = LastAction.None
 }
+
 
 // data access layer
 
