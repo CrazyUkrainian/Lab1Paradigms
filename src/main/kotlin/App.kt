@@ -6,9 +6,10 @@ var tasks: List<Triple<String, Boolean, String>> = listOf()
 sealed class LastAction {
     data class Add(val task: Triple<String, Boolean, String>) : LastAction()
     data class Complete(val task: Triple<String, Boolean, String>) : LastAction()
-    object Remove : LastAction() // No specific task, represents multiple removals
+    data class Remove(val removedTasks: List<Triple<String, Boolean, String>>) : LastAction() // Store removed tasks
     object None : LastAction() // Default state, no last action
 }
+
 
 var lastAction: LastAction = LastAction.None // Initialize with no action
 fun main() {
@@ -91,10 +92,11 @@ fun removeCompletedTasks() {
         return
     }
 
-    tasks = tasks.filterNot { it.second } // immutable update
-    lastAction = LastAction.Remove
-    println("completed tasks removed!")
+    tasks = tasks.filterNot { it.second } // Immutable update
+    lastAction = LastAction.Remove(completedTasks) // Store removed tasks for undo
+    println("Completed tasks removed!")
 }
+
 fun undoLastAction() {
     when (lastAction) {
         is LastAction.Add -> {
@@ -107,7 +109,9 @@ fun undoLastAction() {
             println("Task completion undone!")
         }
         is LastAction.Remove -> {
-            println("Undo for removal of multiple tasks is not supported")
+            val removedTasks = (lastAction as LastAction.Remove).removedTasks
+            tasks = tasks + removedTasks // Re-add removed tasks
+            println("Removed tasks restored!")
         }
         LastAction.None -> {
             println("No action to undo")
@@ -115,7 +119,6 @@ fun undoLastAction() {
     }
     lastAction = LastAction.None
 }
-
 
 // data access layer
 
