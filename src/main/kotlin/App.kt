@@ -1,43 +1,50 @@
 package org.example
 import java.io.File
 
-// immutable tasks
-var tasks: List<Triple<String, Boolean, String>> = listOf()
+// Application state class (ensure encapsulation, for immutabilty)
+// each function takes the current state and returns a new state instead of mutating global variables
+data class TodoAppState(
+    val tasks: List<Triple<String, Boolean, String>> = listOf(),
+    val lastAction: LastAction = LastAction.None
+)
+
 sealed class LastAction {
     data class Add(val task: Triple<String, Boolean, String>) : LastAction()
     data class Complete(val task: Triple<String, Boolean, String>) : LastAction()
-    data class Remove(val removedTasks: List<Triple<String, Boolean, String>>) : LastAction() // Store removed tasks
-    object None : LastAction() // Default state, no last action
+    data class Remove(val removedTasks: List<Triple<String, Boolean, String>>) : LastAction()
+    object None : LastAction()
 }
 
-
-var lastAction: LastAction = LastAction.None // Initialize with no action
 fun main() {
-    tasks = loadTasks() // load tasks from file
+    var state = TodoAppState(tasks = loadTasks()) // Initialize with tasks from file
+// all functions now receive state and work on it, returning an updated state
     println("welcome to the best kotlin ToDo app")
-
     while (true) {
-        displayTasks() // UI layer
-        showTaskStatistics() // stats display in UI
+        displayTasks(state.tasks)
+        showTaskStatistics(state.tasks)
         println("Choose action: a - add / c - complete / r - remove / u - undo / q - quit")
-        when (readlnOrNull()?.lowercase()) {
-            "a" -> addTask()
-            "c" -> markTaskComplete()
-            "r" -> removeCompletedTasks()
-            "u" -> undoLastAction()
+
+        state = when (readlnOrNull()?.lowercase()) {
+            "a" -> addTask(state)
+            "c" -> markTaskComplete(state)
+            "r" -> removeCompletedTasks(state)
+            "u" -> undoLastAction(state)
             "q" -> {
-                saveTasks(tasks)
+                saveTasks(state.tasks)
                 println("goodbye!")
                 break
             }
-            else -> println("Invalid input")
+            else -> {
+                println("Invalid input")
+                state
+            }
         }
     }
 }
 
 // UI Layer
 
-fun displayTasks() {
+fun displayTasks(tasks: List<Triple<String, Boolean, String>>) {
     println("tasks:")
     if (tasks.isEmpty()) {
         println("No tasks available.")
@@ -50,77 +57,92 @@ fun displayTasks() {
     }
 }
 
-fun showTaskStatistics() {
+fun showTaskStatistics(tasks: List<Triple<String, Boolean, String>>) {
     val (completed, incomplete) = tasks.partition { it.second }
     println("Completed: ${completed.size} | Incomplete: ${incomplete.size}")
 }
 
 // Logic Layer
 
-fun addTask() {
+fun addTask(state: TodoAppState): TodoAppState {
     println("task description:")
     val description = readlnOrNull()?.takeIf { it.isNotBlank() } ?: run {
         println("Task description required")
-        return
+        return state
     }
 
     println("enter notes (optional):")
     val note = readlnOrNull() ?: ""
     val newTask = Triple(description, false, note)
 
-    tasks = tasks + newTask // immutable update
-    lastAction = LastAction.Add(newTask)
-    println("task added!")
+    return state.copy(
+        tasks = state.tasks + newTask,
+        lastAction = LastAction.Add(newTask)
+    ).also { println("task added!") }
 }
 
-fun markTaskComplete() {
+fun markTaskComplete(state: TodoAppState): TodoAppState {
     println("number tasks to mark complete:")
-    val taskIndex = validateTaskNumber() ?: return
-    val task = tasks[taskIndex]
+    val taskIndex = validateTaskNumber(state.tasks) ?: return state
+    val task = state.tasks[taskIndex]
 
-    tasks = tasks.mapIndexed { index, t ->
+    val updatedTasks = state.tasks.mapIndexed { index, t ->
         if (index == taskIndex) t.copy(second = true) else t
     }
-    lastAction = LastAction.Complete(task)
-    println("task marked as complete!")
+
+    return state.copy(
+        tasks = updatedTasks,
+        lastAction = LastAction.Complete(task)
+    ).also { println("task marked as complete!") }
 }
 
-fun removeCompletedTasks() {
-    val completedTasks = tasks.filter { it.second }
+fun removeCompletedTasks(state: TodoAppState): TodoAppState {
+    val completedTasks = state.tasks.filter { it.second }
     if (completedTasks.isEmpty()) {
         println("No completed tasks to remove!")
-        return
+        return state
     }
 
-    tasks = tasks.filterNot { it.second } // Immutable update
-    lastAction = LastAction.Remove(completedTasks) // Store removed tasks for undo
-    println("Completed tasks removed!")
-}
+    val updatedTasks = state.tasks.filterNot { it.second }
 
-fun undoLastAction() {
-    when (lastAction) {
+    return state.copy(
+        tasks = updatedTasks,
+        lastAction = LastAction.Remove(completedTasks)
+    ).also { println("Completed tasks removed!") }
+}
+// function reconstructs the state by modifying only the relevant fields
+fun undoLastAction(state: TodoAppState): TodoAppState {
+    return when (val action = state.lastAction) {
         is LastAction.Add -> {
-            tasks = tasks - (lastAction as LastAction.Add).task
-            println("Last added task removed!")
+            state.copy(
+                tasks = state.tasks - action.task,
+                lastAction = LastAction.None
+            ).also { println("Last added task removed!") }
         }
         is LastAction.Complete -> {
-            val undoneTask = (lastAction as LastAction.Complete).task
-            tasks = tasks.map { if (it == undoneTask) undoneTask.copy(second = false) else it }
-            println("Task completion undone!")
+            val undoneTask = action.task
+            val updatedTasks = state.tasks.map {
+                if (it == undoneTask) undoneTask.copy(second = false) else it
+            }
+            state.copy(
+                tasks = updatedTasks,
+                lastAction = LastAction.None
+            ).also { println("Task completion undone!") }
         }
         is LastAction.Remove -> {
-            val removedTasks = (lastAction as LastAction.Remove).removedTasks
-            tasks = tasks + removedTasks // Re-add removed tasks
-            println("Removed tasks restored!")
+            state.copy(
+                tasks = state.tasks + action.removedTasks,
+                lastAction = LastAction.None
+            ).also { println("Removed tasks restored!") }
         }
         LastAction.None -> {
             println("No action to undo")
+            state
         }
     }
-    lastAction = LastAction.None
 }
 
-// data access layer
+// Data Access Layer
 
 fun loadTasks(): List<Triple<String, Boolean, String>> {
     val file = File("todo.txt")
@@ -142,9 +164,9 @@ fun saveTasks(tasks: List<Triple<String, Boolean, String>>) {
     )
 }
 
-// utilities
-
-fun validateTaskNumber(): Int? {
+// Utilities
+// functions like it is stateless and do not mutate any input or global state. They operate solely on the provided arguments
+fun validateTaskNumber(tasks: List<Triple<String, Boolean, String>>): Int? {
     val taskNumber = readlnOrNull()?.toIntOrNull()
     return if (taskNumber != null && taskNumber in 1..tasks.size) {
         taskNumber - 1

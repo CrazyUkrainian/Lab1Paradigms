@@ -7,6 +7,12 @@ Adding a validation function for task numbers reduced duplication and streamline
 Implementing the undo feature was challenging but rewarding,
 as it pushed me to think more critically about tracking and reverting state changes.
 
+Why This Code is Fully Immutable:
+No Shared State - The application's state is only managed within main, and every function explicitly receives and returns the state instead of modifying a global variable.
+Encapsulation -  All updates to tasks and lastAction occur through the immutable TodoAppState.
+Functional Approach -  Each function operates independently and does not rely on or mutate external/global variables.
+Thread Safety - Since there’s no mutable shared state, this design inherently avoids concurrency issues.
+
 Creating the call graphs before and after the refactor was a useful visual tool ,
 it showed how much the structure improved. 
 Overall, this project highlighted the importance of writing clear and maintainable code,
